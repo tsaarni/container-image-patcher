@@ -3,7 +3,6 @@ package main
 import (
 	"archive/tar"
 	"archive/zip"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -18,26 +17,22 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/daemon"
 )
 
-var matcher = regexp.MustCompile(`log4j-core.+\.jar`)
-
-func main() {
-	var image string
-	var dest string
-
-	flag.StringVar(&image, "source-tag", "", "Tag of the image to be scanned")
-	flag.StringVar(&dest, "dest-dir", "", "Destination directory where to export the impacted JARs")
-	flag.Parse()
+func extractJar(image, match, dest string) error {
+	matcher, err := regexp.Compile(match)
+	if err != nil {
+		return err
+	}
 
 	log.Println("Opening image:", image)
 
 	tag, err := name.NewTag(image)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	img, err := daemon.Image(tag)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	// Open the exported image file stream.
@@ -47,7 +42,7 @@ func main() {
 	go func() {
 		err = crane.Export(img, writer)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
 		}
 	}()
 
@@ -58,7 +53,7 @@ func main() {
 			break
 		}
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		log.Println(hdr.Name)
 
@@ -69,24 +64,24 @@ func main() {
 
 			destFile, err := sanitizeExtractPath(dest, hdr.Name)
 			if err != nil {
-				log.Fatal(err)
+				return err
 			}
 
 			// Create directory structure which matches with the directory structure in the tar file.
 			err = os.MkdirAll(path.Dir(destFile), os.ModePerm)
 			if err != nil {
-				log.Fatal(err)
+				return err
 			}
 
 			// Export the jar file.
 			w, err := os.Create(destFile)
 			if err != nil {
-				log.Fatal(err)
+				return err
 			}
 
 			_, err = io.Copy(w, tr)
 			if err != nil {
-				log.Fatal(err)
+				return err
 			}
 			err = w.Close()
 			if err != nil {
@@ -99,10 +94,10 @@ func main() {
 		if strings.HasSuffix(hdr.Name, "jar") {
 			tmpFile, err := os.CreateTemp("", "container-image-patcher.*.jar")
 			if err != nil {
-				log.Fatal(err)
+				return err
 			}
 
-			hasLog4j, err := recurseJar(">>>"+hdr.Name+">>>", tr, tmpFile)
+			hasLog4j, err := recurseJar(">>>"+hdr.Name+">>>", tr, tmpFile, matcher)
 			if err != nil {
 				log.Println(err)
 			}
@@ -110,7 +105,7 @@ func main() {
 			if hasLog4j {
 				destFile, err := sanitizeExtractPath(dest, hdr.Name)
 				if err != nil {
-					log.Fatal(err)
+					return err
 				}
 
 				log.Println("Exporting impacted JAR", destFile)
@@ -118,25 +113,27 @@ func main() {
 				// Create directory structure which matches with the directory structure in the tar file.
 				err = os.MkdirAll(path.Dir(destFile), os.ModePerm)
 				if err != nil {
-					log.Fatal(err)
+					return err
 				}
 
 				// Move the jar file from tmp to into the directory structure.
 				err = os.Rename(tmpFile.Name(), destFile)
 				if err != nil {
-					log.Fatal(err)
+					return err
 				}
 			} else {
 				err := os.Remove(tmpFile.Name())
 				if err != nil {
-					log.Fatal(err)
+					return err
 				}
 			}
 		}
 	}
+
+	return nil
 }
 
-func recurseJar(logprefix string, reader io.Reader, tmpFile *os.File) (bool, error) {
+func recurseJar(logprefix string, reader io.Reader, tmpFile *os.File, matcher *regexp.Regexp) (bool, error) {
 	// Copy jar from reader to temp file.
 	_, err := io.Copy(tmpFile, reader)
 	if err != nil {
@@ -172,7 +169,7 @@ func recurseJar(logprefix string, reader io.Reader, tmpFile *os.File) (bool, err
 			}
 			defer os.Remove(tmpFile.Name())
 
-			hasLog4j, err := recurseJar(logprefix+">>>", j, tmpFile)
+			hasLog4j, err := recurseJar(logprefix+">>>", j, tmpFile, matcher)
 			if err != nil {
 				return false, err
 			}

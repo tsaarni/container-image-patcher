@@ -3,7 +3,6 @@ package main
 import (
 	"archive/tar"
 	"bytes"
-	"flag"
 	"io"
 	"io/fs"
 	"log"
@@ -17,53 +16,46 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 )
 
-func main() {
-	var source string
-	var patchDir string
-	var dest string
-
-	flag.StringVar(&source, "source-tag", "", "Tag of the source image to be patched")
-	flag.StringVar(&patchDir, "patch-dir", "", "Source directory where to import files to the patch layer")
-	flag.StringVar(&dest, "dest-tag", "", "Tag of the destination image")
-	flag.Parse()
-
+func patch(source, patchDir, dest string) error {
 	log.Println("Opening source image:", source)
 
 	sourceTag, err := name.NewTag(source)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	destTag, err := name.NewTag(dest)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	origImage, err := daemon.Image(sourceTag)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	log.Println("Appending patch layer from directory:", patchDir)
 
 	layer, err := createlayer(patchDir)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	newImage, err := mutate.AppendLayers(origImage, layer)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	log.Println("Writing image with tag:", dest)
 
 	_, err = daemon.Write(destTag, newImage)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	log.Println("Successful")
+
+	return nil
 }
 
 func createlayer(rootdir string) (v1.Layer, error) {

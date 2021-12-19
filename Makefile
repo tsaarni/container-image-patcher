@@ -8,10 +8,10 @@ check: test
 	gosec -quiet ./...
 
 build:
-	go build -v ./cmd/certyaml
+	go build -v ./cmd/image-patcher
 
 install:
-	go install -v ./cmd/certyaml
+	go install -v ./cmd/image-patcher
 
 install-tools:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.42.1
