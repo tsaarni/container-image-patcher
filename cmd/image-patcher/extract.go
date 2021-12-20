@@ -17,7 +17,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/daemon"
 )
 
-func extractJar(image, match, dest string) error {
+func extract(image, match, dest string, searchJars bool) error {
 	matcher, err := regexp.Compile(match)
 	if err != nil {
 		return err
@@ -55,25 +55,24 @@ func extractJar(image, match, dest string) error {
 		if err != nil {
 			return err
 		}
-		log.Println(hdr.Name)
 
-		// Check if the file is log4j-core.
+		// Check if the file matches with the match criteria from user.
 		if matcher.MatchString(hdr.Name) {
-			log.Println("Impacted JAR found:", hdr.Name)
-			log.Println("Exporting impacted JAR", hdr.Name, "to directory", dest)
+			log.Println("File matches:", hdr.Name)
+			log.Println("Exporting", hdr.Name, "to directory", dest)
 
 			destFile, err := sanitizeExtractPath(dest, hdr.Name)
 			if err != nil {
 				return err
 			}
 
-			// Create directory structure which matches with the directory structure in the tar file.
+			// Create directory structure which matches with the directory structure in the source tar file.
 			err = os.MkdirAll(path.Dir(destFile), os.ModePerm)
 			if err != nil {
 				return err
 			}
 
-			// Export the jar file.
+			// Export the matched file.
 			w, err := os.Create(destFile)
 			if err != nil {
 				return err
@@ -89,20 +88,22 @@ func extractJar(image, match, dest string) error {
 			}
 
 			continue
+		} else {
+			log.Println("Skipping file", hdr.Name)
 		}
 
-		if strings.HasSuffix(hdr.Name, "jar") {
+		if strings.HasSuffix(hdr.Name, ".jar") && searchJars {
 			tmpFile, err := os.CreateTemp("", "container-image-patcher.*.jar")
 			if err != nil {
 				return err
 			}
 
-			hasLog4j, err := recurseJar(">>>"+hdr.Name+">>>", tr, tmpFile, matcher)
+			hasMatch, err := recurseJar(">>>"+hdr.Name+">>>", tr, tmpFile, matcher)
 			if err != nil {
 				log.Println(err)
 			}
 
-			if hasLog4j {
+			if hasMatch {
 				destFile, err := sanitizeExtractPath(dest, hdr.Name)
 				if err != nil {
 					return err
@@ -134,6 +135,8 @@ func extractJar(image, match, dest string) error {
 }
 
 func recurseJar(logprefix string, reader io.Reader, tmpFile *os.File, matcher *regexp.Regexp) (bool, error) {
+	log.Println("Extracting JAR")
+
 	// Copy jar from reader to temp file.
 	_, err := io.Copy(tmpFile, reader)
 	if err != nil {
@@ -151,13 +154,13 @@ func recurseJar(logprefix string, reader io.Reader, tmpFile *os.File, matcher *r
 	for _, f := range z.File {
 		log.Println(logprefix + f.Name)
 
-		// Check if the file is log4j-core.
+		// Check if the file matches with the match criteria from user.
 		if matcher.MatchString(f.Name) {
 			return true, nil
 		}
 
 		// Recursively check jar files inside jar files.
-		if strings.HasSuffix(f.Name, "jar") {
+		if strings.HasSuffix(f.Name, ".jar") {
 			j, err := f.Open()
 			if err != nil {
 				return false, err
@@ -169,11 +172,11 @@ func recurseJar(logprefix string, reader io.Reader, tmpFile *os.File, matcher *r
 			}
 			defer os.Remove(tmpFile.Name())
 
-			hasLog4j, err := recurseJar(logprefix+">>>", j, tmpFile, matcher)
+			hasMatch, err := recurseJar(logprefix+">>>", j, tmpFile, matcher)
 			if err != nil {
 				return false, err
 			}
-			if hasLog4j {
+			if hasMatch {
 				log.Println("Impacted JAR found:", logprefix+f.Name)
 				return true, nil
 			}

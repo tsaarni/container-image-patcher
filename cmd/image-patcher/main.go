@@ -10,17 +10,18 @@ import (
 var (
 	// Subcommands
 
-	// image-patcher extract-jar source-tag match dest-dir
-	extractJarFlags          = flag.NewFlagSet("extract-jar", flag.ExitOnError)
-	extractJarFlagsSourceTag = extractJarFlags.String("source-tag", "", "Tag of the image to be scanned")
-	extractJarFlagsMatch     = extractJarFlags.String("match", "", "Regex pattern to search for jar files in the image")
-	extractJarFlagsDestDir   = extractJarFlags.String("dest-dir", "", "Destination directory where to export the impacted JARs")
+	// image-patcher extract -jar source-tag match dest-dir
+	extractFlags          = flag.NewFlagSet("extract", flag.ExitOnError)
+	extractFlagsSourceTag = extractFlags.String("source-tag", "", "Tag of the image to be scanned.")
+	extractFlagsMatch     = extractFlags.String("match", "", "Regex pattern to search for files in the image.")
+	extractFlagsDestDir   = extractFlags.String("dest-dir", "", "Destination directory where to export matching files.")
+	extractFlagsJar       = extractFlags.Bool("search-jars", false, "Search for matches inside JARs. Whole JAR is exported if match is found.")
 
 	// image-patcher patch source-tag patch-dir dest-tag
 	patchFlags          = flag.NewFlagSet("patch", flag.ExitOnError)
-	patchFlagsSourceTag = patchFlags.String("source-tag", "", "Tag of the source image to be patched")
-	patchFlagsPatchDir  = patchFlags.String("patch-dir", "", "Source directory where to import files to the patch layer")
-	patchFlagsDestTag   = patchFlags.String("dest-tag", "", "Tag of the destination image")
+	patchFlagsSourceTag = patchFlags.String("source-tag", "", "Tag of the source image to be patched.")
+	patchFlagsPatchDir  = patchFlags.String("patch-dir", "", "Source directory where to import files to the patch layer.")
+	patchFlagsDestTag   = patchFlags.String("dest-tag", "", "Tag of the destination image,")
 )
 
 func main() {
@@ -35,13 +36,13 @@ func main() {
 
 	var err error
 	switch args[0] {
-	case "extract-jar":
-		err = extractJarFlags.Parse(args[1:])
+	case "extract":
+		err = extractFlags.Parse(args[1:])
 		if err != nil {
 			break
 		}
-		ensureNotEmpty(extractJarFlags.Usage, extractJarFlagsSourceTag, extractJarFlagsMatch, extractJarFlagsDestDir)
-		err = extractJar(*extractJarFlagsSourceTag, *extractJarFlagsMatch, *extractJarFlagsDestDir)
+		ensureNotEmpty(extractFlags.Usage, extractFlagsSourceTag, extractFlagsMatch, extractFlagsDestDir)
+		err = extract(*extractFlagsSourceTag, *extractFlagsMatch, *extractFlagsDestDir, *extractFlagsJar)
 	case "patch":
 		err = patchFlags.Parse(args[1:])
 		if err != nil {
@@ -67,7 +68,7 @@ Usage:
 Commands:
 
 `)
-	extractJarFlags.Usage()
+	extractFlags.Usage()
 	fmt.Fprintln(w, "")
 	patchFlags.Usage()
 }

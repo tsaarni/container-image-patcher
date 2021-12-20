@@ -1,4 +1,4 @@
-all: check build
+all: build
 
 test:
 	go test -v ./...
